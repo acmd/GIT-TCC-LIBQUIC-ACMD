@@ -13,6 +13,7 @@
 #include "net/quic/proto/cached_network_parameters.pb.h"
 #include "net/quic/quic_bug_tracker.h"
 #include "net/quic/quic_flags.h"
+#include <fstream>
 
 using std::max;
 using std::min;
@@ -25,7 +26,7 @@ namespace {
 // fast retransmission.  The cwnd after a timeout is still 1.
 const QuicPacketCount kDefaultMinimumCongestionWindow = 2;
 
-std::ofstream myfile;
+std::ofstream metricas;
 }  // namespace
 
 TcpCubicSenderPackets::TcpCubicSenderPackets(
@@ -44,7 +45,13 @@ TcpCubicSenderPackets::TcpCubicSenderPackets(
       max_tcp_congestion_window_(max_tcp_congestion_window),
       initial_tcp_congestion_window_(initial_tcp_congestion_window),
       initial_max_tcp_congestion_window_(max_tcp_congestion_window),
-      min_slow_start_exit_window_(min_congestion_window_) {}
+      min_slow_start_exit_window_(min_congestion_window_) {
+
+	metricas.open ("metricas.txt");
+	metricas << "Packet Number;Bytes in Flight;Bandwidth;Pacote perdido;Perdidos ao todo.\n";
+	metricas.close();
+
+}
 
 TcpCubicSenderPackets::~TcpCubicSenderPackets() {}
 
@@ -63,16 +70,27 @@ void TcpCubicSenderPackets::SetCongestionWindowFromBandwidthAndRtt(
         max(min(new_congestion_window, kMaxResumptionCongestionWindow),
             kMinCongestionWindowForBandwidthResumption);
   }
+	metricas.open ("metricas.txt", std::ios::app);
+	metricas << "Setando CWND BWRTT. CWND: " << congestion_window_ << ".\n";
+	metricas.close();
 }
 
 void TcpCubicSenderPackets::SetCongestionWindowInPackets(
     QuicPacketCount congestion_window) {
   congestion_window_ = congestion_window;
+
+	metricas.open ("metricas.txt", std::ios::app);
+	metricas << "Setando CWND: " << congestion_window_ << ".\n";
+	metricas.close();
 }
 
 void TcpCubicSenderPackets::SetMinCongestionWindowInPackets(
     QuicPacketCount congestion_window) {
   min_congestion_window_ = congestion_window;
+
+	metricas.open ("metricas.txt", std::ios::app);
+	metricas << "Minimo CWND: " << min_congestion_window_ << ".\n";
+	metricas.close();
 }
 
 void TcpCubicSenderPackets::SetNumEmulatedConnections(int num_connections) {
@@ -82,6 +100,10 @@ void TcpCubicSenderPackets::SetNumEmulatedConnections(int num_connections) {
 
 void TcpCubicSenderPackets::ExitSlowstart() {
   slowstart_threshold_ = congestion_window_;
+
+	metricas.open ("metricas.txt", std::ios::app);
+	metricas << "### Saindo do SlowStart ###\n";
+	metricas.close();
 }
 
 void TcpCubicSenderPackets::OnPacketLost(QuicPacketNumber packet_number,
@@ -104,10 +126,17 @@ void TcpCubicSenderPackets::OnPacketLost(QuicPacketNumber packet_number,
         slowstart_threshold_ = congestion_window_;
       }
     }
+	metricas.open ("metricas.txt", std::ios::app);
+	metricas << "Ignorando perda: " << packet_number << ", pois é menor que o: " << largest_sent_at_last_cutback_ << ". Total: " << stats_->tcp_loss_events << ".\n";
+	metricas << "BINF: " << bytes_in_flight << " IGLOSS\n";
+	metricas << "CWND: " << congestion_window_ << " IGLOSS\n";
+	metricas << "SSTH: " << slowstart_threshold_ << " IGLOSS\n";
+	metricas.close();
     DVLOG(1) << "Ignoring loss for largest_missing:" << packet_number
              << " because it was sent prior to the last CWND cutback.";
     return;
   }
+
   ++stats_->tcp_loss_events;
   last_cutback_exited_slowstart_ = InSlowStart();
   if (InSlowStart()) {
@@ -140,6 +169,14 @@ void TcpCubicSenderPackets::OnPacketLost(QuicPacketNumber packet_number,
   // reset packet count from congestion avoidance mode. We start
   // counting again when we're out of recovery.
   congestion_window_count_ = 0;
+
+  metricas.open ("metricas.txt", std::ios::app);
+  metricas << "Número do pacote perdido: " << packet_number << ". Total: " << stats_->tcp_loss_events << ".\n";
+  metricas << "BINF: " << bytes_in_flight << " LOSS\n";
+  metricas << "CWND: " << congestion_window_ << " LOSS\n";
+  metricas << "SSTH: " << slowstart_threshold_ << " LOSS\n";
+  metricas.close();
+
   DVLOG(1) << "Incoming loss; congestion window: " << congestion_window_
            << " slowstart threshold: " << slowstart_threshold_;
 }
@@ -156,21 +193,39 @@ QuicByteCount TcpCubicSenderPackets::GetSlowStartThreshold() const {
 // represents, but quic has a separate ack for each packet.
 void TcpCubicSenderPackets::MaybeIncreaseCwnd(
     QuicPacketNumber acked_packet_number,
-    QuicByteCount /*acked_bytes*/,
+    QuicByteCount acked_bytes,
     QuicByteCount bytes_in_flight) {
   QUIC_BUG_IF(InRecovery()) << "Never increase the CWND during recovery.";
   // Do not increase the congestion window unless the sender is close to using
   // the current window.
+
+    metricas.open ("metricas.txt", std::ios::app);
+    metricas << "Recebendo pacote: " << acked_packet_number << "\n";
+    metricas << "BINF: " << bytes_in_flight << "\n";
+    metricas << "BW: " << BandwidthEstimate().ToKBytesPerSecond() << "\n";
+    metricas.close();
+
   if (!IsCwndLimited(bytes_in_flight)) {
     cubic_.OnApplicationLimited();
+    metricas.open ("metricas.txt", std::ios::app);
+    metricas << "CWND: " << congestion_window_ << " limitado\n";
+    metricas.close();
     return;
   }
   if (congestion_window_ >= max_tcp_congestion_window_) {
+	    metricas.open ("metricas.txt", std::ios::app);
+	    metricas << "CWND: " << congestion_window_ << " maximo\n";
+	    metricas.close();
     return;
   }
   if (InSlowStart()) {
     // TCP slow start, exponential growth, increase by one for each ACK.
     ++congestion_window_;
+
+    metricas.open ("metricas.txt", std::ios::app);
+    metricas << "CWND: " << congestion_window_ << "+SS\n";
+    metricas.close();
+
     DVLOG(1) << "Slow start; congestion window: " << congestion_window_
              << " slowstart threshold: " << slowstart_threshold_;
     return;
@@ -193,9 +248,16 @@ void TcpCubicSenderPackets::MaybeIncreaseCwnd(
     congestion_window_ = min(max_tcp_congestion_window_,
                              cubic_.CongestionWindowAfterAck(
                                  congestion_window_, rtt_stats_->min_rtt()));
+
+    metricas.open ("metricas.txt", std::ios::app);
+    metricas << "CWND: " << congestion_window_ << "+CA\n";
+    metricas << "SSTH: " << slowstart_threshold_ << "\n";
+    metricas.close();
+
     DVLOG(1) << "Cubic; congestion window: " << congestion_window_
              << " slowstart threshold: " << slowstart_threshold_;
   }
+
 }
 
 void TcpCubicSenderPackets::HandleRetransmissionTimeout() {

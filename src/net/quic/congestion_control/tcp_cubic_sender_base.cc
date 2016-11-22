@@ -13,6 +13,7 @@
 #include "net/quic/proto/cached_network_parameters.pb.h"
 #include "net/quic/quic_bug_tracker.h"
 #include "net/quic/quic_flags.h"
+#include <fstream>
 
 using std::max;
 using std::min;
@@ -27,6 +28,7 @@ const QuicByteCount kMaxBurstBytes = 3 * kDefaultTCPMSS;
 const float kRenoBeta = 0.7f;               // Reno backoff factor.
 const uint32_t kDefaultNumConnections = 2;  // N-connection emulation.
 const float kRateBasedExtraCwnd = 1.5f;     // CWND for rate based sending.
+std::ofstream metricas;						// file to output metrics
 }  // namespace
 
 TcpCubicSenderBase::TcpCubicSenderBase(const QuicClock* clock,
@@ -131,6 +133,9 @@ void TcpCubicSenderBase::OnCongestionEvent(
     QuicByteCount bytes_in_flight,
     const CongestionVector& acked_packets,
     const CongestionVector& lost_packets) {
+
+	QuicByteCount bytes_in_flight_aux = bytes_in_flight;
+
   if (rtt_updated && InSlowStart() &&
       hybrid_slow_start_.ShouldExitSlowStart(
           rtt_stats_->latest_rtt(), rtt_stats_->min_rtt(),
@@ -143,7 +148,10 @@ void TcpCubicSenderBase::OnCongestionEvent(
   }
   for (CongestionVector::const_iterator it = acked_packets.begin();
        it != acked_packets.end(); ++it) {
-    OnPacketAcked(it->first, it->second, bytes_in_flight);
+
+	bytes_in_flight_aux = (bytes_in_flight_aux - it->second);
+
+    OnPacketAcked(it->first, it->second, bytes_in_flight_aux);
   }
 }
 
@@ -167,7 +175,7 @@ void TcpCubicSenderBase::OnPacketAcked(QuicPacketNumber acked_packet_number,
 
 bool TcpCubicSenderBase::OnPacketSent(
     QuicTime /*sent_time*/,
-    QuicByteCount /*bytes_in_flight*/,
+    QuicByteCount bytes_in_flight,
     QuicPacketNumber packet_number,
     QuicByteCount bytes,
     HasRetransmittableData is_retransmittable) {
@@ -186,6 +194,13 @@ bool TcpCubicSenderBase::OnPacketSent(
   DCHECK_LT(largest_sent_packet_number_, packet_number);
   largest_sent_packet_number_ = packet_number;
   hybrid_slow_start_.OnPacketSent(packet_number);
+
+ // QuicBandwidth teste = BandwidthEstimate();
+
+
+  metricas.open ("metricas.txt", std::ios::app);
+  metricas << "Enviando pacote: " << packet_number << ". BINF: " << (bytes_in_flight + bytes) << ". BW: " << BandwidthEstimate().ToKBytesPerSecond() << ".\n";
+  metricas.close();
   return true;
 }
 
