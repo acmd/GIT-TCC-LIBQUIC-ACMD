@@ -48,7 +48,7 @@ TcpCubicSenderPackets::TcpCubicSenderPackets(
       min_slow_start_exit_window_(min_congestion_window_) {
 
 	metricas.open ("metricas.txt");
-	metricas << "Packet Number;Bytes in Flight;Bandwidth;Pacote perdido;Perdidos ao todo.\n";
+	metricas << "Packet Number;Tamanho Byte;Bytes in Flight;Bandwidth;Congestion Window;Algoritmo;Pacote perdido;Perdidos ao todo;Perdido ignorado;Largest sent\n";
 	metricas.close();
 
 }
@@ -127,10 +127,14 @@ void TcpCubicSenderPackets::OnPacketLost(QuicPacketNumber packet_number,
       }
     }
 	metricas.open ("metricas.txt", std::ios::app);
-	metricas << "Ignorando perda: " << packet_number << ", pois é menor que o: " << largest_sent_at_last_cutback_ << ". Total: " << stats_->tcp_loss_events << ".\n";
-	metricas << "BINF: " << bytes_in_flight << " IGLOSS\n";
-	metricas << "CWND: " << congestion_window_ << " IGLOSS\n";
-	metricas << "SSTH: " << slowstart_threshold_ << " IGLOSS\n";
+	metricas << packet_number << ";"; // packet number
+	metricas << lost_bytes << ";"; // packet size in bytes
+	metricas << bytes_in_flight << ";"; // bytes in flight
+	metricas << BandwidthEstimate().ToKBytesPerSecond() << ";"; // bandwidth
+	metricas << congestion_window_ << ";"; // cwnd
+	metricas << "IGLOSS" << ";;"; // algorithm
+	metricas << stats_->tcp_loss_events << ";X;"; // total lost
+	metricas << largest_sent_at_last_cutback_ << "\n"; // largest sent
 	metricas.close();
     DVLOG(1) << "Ignoring loss for largest_missing:" << packet_number
              << " because it was sent prior to the last CWND cutback.";
@@ -171,10 +175,14 @@ void TcpCubicSenderPackets::OnPacketLost(QuicPacketNumber packet_number,
   congestion_window_count_ = 0;
 
   metricas.open ("metricas.txt", std::ios::app);
-  metricas << "Número do pacote perdido: " << packet_number << ". Total: " << stats_->tcp_loss_events << ".\n";
-  metricas << "BINF: " << bytes_in_flight << " LOSS\n";
-  metricas << "CWND: " << congestion_window_ << " LOSS\n";
-  metricas << "SSTH: " << slowstart_threshold_ << " LOSS\n";
+  metricas << packet_number << ";"; // packet number
+  metricas << lost_bytes << ";"; // packet size in bytes
+  metricas << bytes_in_flight << ";"; // bytes in flight
+  metricas << BandwidthEstimate().ToKBytesPerSecond() << ";"; // bandwidth
+  metricas << congestion_window_ << ";";
+  metricas << "LOSS" << ";X;"; // algorithm
+  metricas << stats_->tcp_loss_events << ";;"; // total lost
+  metricas << largest_sent_at_last_cutback_ << "\n"; // largest sent
   metricas.close();
 
   DVLOG(1) << "Incoming loss; congestion window: " << congestion_window_
@@ -200,21 +208,22 @@ void TcpCubicSenderPackets::MaybeIncreaseCwnd(
   // the current window.
 
     metricas.open ("metricas.txt", std::ios::app);
-    metricas << "Recebendo pacote: " << acked_packet_number << "\n";
-    metricas << "BINF: " << bytes_in_flight << "\n";
-    metricas << "BW: " << BandwidthEstimate().ToKBytesPerSecond() << "\n";
+    metricas << acked_packet_number << ";";
+    metricas << acked_bytes << ";"; // packet size in bytes
+    metricas << bytes_in_flight << ";";
+    metricas << BandwidthEstimate().ToKBytesPerSecond() << ";";
     metricas.close();
 
   if (!IsCwndLimited(bytes_in_flight)) {
     cubic_.OnApplicationLimited();
     metricas.open ("metricas.txt", std::ios::app);
-    metricas << "CWND: " << congestion_window_ << " limitado\n";
+    metricas << congestion_window_ << ";APPLIM;;;;\n";
     metricas.close();
     return;
   }
   if (congestion_window_ >= max_tcp_congestion_window_) {
 	    metricas.open ("metricas.txt", std::ios::app);
-	    metricas << "CWND: " << congestion_window_ << " maximo\n";
+	    metricas << congestion_window_ << ";TCPMAX;;;;\n";
 	    metricas.close();
     return;
   }
@@ -223,7 +232,7 @@ void TcpCubicSenderPackets::MaybeIncreaseCwnd(
     ++congestion_window_;
 
     metricas.open ("metricas.txt", std::ios::app);
-    metricas << "CWND: " << congestion_window_ << "+SS\n";
+    metricas << congestion_window_ << ";SS;;;;\n";
     metricas.close();
 
     DVLOG(1) << "Slow start; congestion window: " << congestion_window_
@@ -250,8 +259,8 @@ void TcpCubicSenderPackets::MaybeIncreaseCwnd(
                                  congestion_window_, rtt_stats_->min_rtt()));
 
     metricas.open ("metricas.txt", std::ios::app);
-    metricas << "CWND: " << congestion_window_ << "+CA\n";
-    metricas << "SSTH: " << slowstart_threshold_ << "\n";
+    metricas << congestion_window_ << ";CA;;;;\n";
+    //metricas << slowstart_threshold_ << "\n";
     metricas.close();
 
     DVLOG(1) << "Cubic; congestion window: " << congestion_window_

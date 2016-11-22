@@ -198,9 +198,9 @@ bool TcpCubicSenderBase::OnPacketSent(
  // QuicBandwidth teste = BandwidthEstimate();
 
 
-  metricas.open ("metricas.txt", std::ios::app);
-  metricas << "Enviando pacote: " << packet_number << ". BINF: " << (bytes_in_flight + bytes) << ". BW: " << BandwidthEstimate().ToKBytesPerSecond() << ".\n";
-  metricas.close();
+ // metricas.open ("metricas.txt", std::ios::app);
+ // metricas << "Enviando pacote: " << packet_number << ". BINF: " << (bytes_in_flight + bytes) << ". BW: " << BandwidthEstimate().ToKBytesPerSecond() << ".\n";
+ // metricas.close();
   return true;
 }
 
