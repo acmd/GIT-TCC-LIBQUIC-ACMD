@@ -14,6 +14,7 @@
 #include "net/quic/quic_bug_tracker.h"
 #include "net/quic/quic_flags.h"
 #include <fstream>
+#include <sys/time.h>
 
 using std::max;
 using std::min;
@@ -27,6 +28,9 @@ namespace {
 const QuicPacketCount kDefaultMinimumCongestionWindow = 2;
 
 std::ofstream metricas;
+timeval tv;
+uint64_t segundoInicial = 0;
+uint64_t milisegundoInicial = 0;
 }  // namespace
 
 TcpCubicSenderPackets::TcpCubicSenderPackets(
@@ -47,8 +51,12 @@ TcpCubicSenderPackets::TcpCubicSenderPackets(
       initial_max_tcp_congestion_window_(max_tcp_congestion_window),
       min_slow_start_exit_window_(min_congestion_window_) {
 
+
+	gettimeofday(&tv, 0);
+	segundoInicial = tv.tv_sec;
+	milisegundoInicial = tv.tv_usec;
 	metricas.open ("metricas.txt");
-	metricas << "Packet Number;Tamanho Byte;Bytes in Flight;Bandwidth;Congestion Window;Algoritmo;Pacote perdido;Perdidos ao todo;Perdido ignorado;Largest sent\n";
+	metricas << "Timestamp;Packet Number;Tamanho Byte;Bytes in Flight;Bandwidth;Congestion Window;Algoritmo;Pacote perdido;Perdidos ao todo;Perdido ignorado;Largest sent\n";
 	metricas.close();
 
 }
@@ -127,10 +135,12 @@ void TcpCubicSenderPackets::OnPacketLost(QuicPacketNumber packet_number,
       }
     }
 	metricas.open ("metricas.txt", std::ios::app);
+	gettimeofday(&tv, 0);
+	metricas << tv.tv_sec - segundoInicial << "." << tv.tv_usec << ";"; //timestamp
 	metricas << packet_number << ";"; // packet number
 	metricas << lost_bytes << ";"; // packet size in bytes
 	metricas << bytes_in_flight << ";"; // bytes in flight
-	metricas << BandwidthEstimate().ToKBytesPerSecond() << ";"; // bandwidth
+	metricas << BandwidthEstimate().ToKBitsPerSecond() << ";"; // bandwidth
 	metricas << congestion_window_ << ";"; // cwnd
 	metricas << "IGLOSS" << ";;"; // algorithm
 	metricas << stats_->tcp_loss_events << ";X;"; // total lost
@@ -175,10 +185,12 @@ void TcpCubicSenderPackets::OnPacketLost(QuicPacketNumber packet_number,
   congestion_window_count_ = 0;
 
   metricas.open ("metricas.txt", std::ios::app);
+  gettimeofday(&tv, 0);
+  metricas << tv.tv_sec - segundoInicial << "." << tv.tv_usec << ";"; //timestamp
   metricas << packet_number << ";"; // packet number
   metricas << lost_bytes << ";"; // packet size in bytes
   metricas << bytes_in_flight << ";"; // bytes in flight
-  metricas << BandwidthEstimate().ToKBytesPerSecond() << ";"; // bandwidth
+  metricas << BandwidthEstimate().ToKBitsPerSecond() << ";"; // bandwidth
   metricas << congestion_window_ << ";";
   metricas << "LOSS" << ";X;"; // algorithm
   metricas << stats_->tcp_loss_events << ";;"; // total lost
@@ -208,10 +220,12 @@ void TcpCubicSenderPackets::MaybeIncreaseCwnd(
   // the current window.
 
     metricas.open ("metricas.txt", std::ios::app);
+    gettimeofday(&tv, 0);
+    metricas << tv.tv_sec - segundoInicial << "." << tv.tv_usec << ";"; //timestamp
     metricas << acked_packet_number << ";";
     metricas << acked_bytes << ";"; // packet size in bytes
     metricas << bytes_in_flight << ";";
-    metricas << BandwidthEstimate().ToKBytesPerSecond() << ";";
+    metricas << BandwidthEstimate().ToKBitsPerSecond() << ";";
     metricas.close();
 
   if (!IsCwndLimited(bytes_in_flight)) {
