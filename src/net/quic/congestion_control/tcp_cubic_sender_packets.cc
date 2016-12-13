@@ -30,7 +30,7 @@ const QuicPacketCount kDefaultMinimumCongestionWindow = 2;
 std::ofstream metricas;
 timeval tv;
 uint64_t segundoInicial = 0;
-uint64_t milisegundoInicial = 0;
+uint64_t microsegundoInicial = 0;
 }  // namespace
 
 TcpCubicSenderPackets::TcpCubicSenderPackets(
@@ -54,9 +54,11 @@ TcpCubicSenderPackets::TcpCubicSenderPackets(
 
 	gettimeofday(&tv, 0);
 	segundoInicial = tv.tv_sec;
-	milisegundoInicial = tv.tv_usec;
+	microsegundoInicial = tv.tv_usec;
 	metricas.open ("metricas.txt");
-	metricas << "Timestamp;Packet Number;Tamanho Byte;Bytes in Flight;Bandwidth;Congestion Window;Algoritmo;Pacote perdido;Perdidos ao todo;Perdido ignorado;Largest sent\n";
+	metricas << "Timestamp (" << tv.tv_sec - segundoInicial << "." << tv.tv_usec << ") (sec.usec);" <<
+			"Packet Number;Packet Size (bytes);RTT (usec);SRTT (usec);RTT Mean Deviation (JITTER?) (usec);Bytes in Flight;Bandwidth (Kbit/s);Congestion Window;Algorithm;" <<
+			"Pacote perdido;Perdidos ao todo;Perdido ignorado;Largest sent;Video Quality\n";
 	metricas.close();
 
 }
@@ -109,9 +111,9 @@ void TcpCubicSenderPackets::SetNumEmulatedConnections(int num_connections) {
 void TcpCubicSenderPackets::ExitSlowstart() {
   slowstart_threshold_ = congestion_window_;
 
-	metricas.open ("metricas.txt", std::ios::app);
-	metricas << "### Saindo do SlowStart ###\n";
-	metricas.close();
+//	metricas.open ("metricas.txt", std::ios::app);
+//	metricas << "### Saindo do SlowStart ###\n";
+//	metricas.close();
 }
 
 void TcpCubicSenderPackets::OnPacketLost(QuicPacketNumber packet_number,
@@ -139,6 +141,9 @@ void TcpCubicSenderPackets::OnPacketLost(QuicPacketNumber packet_number,
 	metricas << tv.tv_sec - segundoInicial << "." << tv.tv_usec << ";"; //timestamp
 	metricas << packet_number << ";"; // packet number
 	metricas << lost_bytes << ";"; // packet size in bytes
+	metricas << (rtt_stats_->latest_rtt()).ToMicroseconds() << ";"; // latest RTT
+	metricas << (rtt_stats_->smoothed_rtt()).ToMicroseconds() << ";"; // latest RTT
+	metricas << (rtt_stats_->mean_deviation()).ToMicroseconds() << ";"; // RTT mean deviation
 	metricas << bytes_in_flight << ";"; // bytes in flight
 	metricas << BandwidthEstimate().ToKBitsPerSecond() << ";"; // bandwidth
 	metricas << congestion_window_ << ";"; // cwnd
@@ -189,6 +194,9 @@ void TcpCubicSenderPackets::OnPacketLost(QuicPacketNumber packet_number,
   metricas << tv.tv_sec - segundoInicial << "." << tv.tv_usec << ";"; //timestamp
   metricas << packet_number << ";"; // packet number
   metricas << lost_bytes << ";"; // packet size in bytes
+  metricas << (rtt_stats_->latest_rtt()).ToMicroseconds() << ";"; // latest RTT
+  metricas << (rtt_stats_->smoothed_rtt()).ToMicroseconds() << ";"; // latest RTT
+  metricas << (rtt_stats_->mean_deviation()).ToMicroseconds() << ";"; // RTT mean deviation
   metricas << bytes_in_flight << ";"; // bytes in flight
   metricas << BandwidthEstimate().ToKBitsPerSecond() << ";"; // bandwidth
   metricas << congestion_window_ << ";";
@@ -219,11 +227,17 @@ void TcpCubicSenderPackets::MaybeIncreaseCwnd(
   // Do not increase the congestion window unless the sender is close to using
   // the current window.
 
+
+    //(rtt_stats_->latest_rtt()).ToMicroseconds();
+
     metricas.open ("metricas.txt", std::ios::app);
     gettimeofday(&tv, 0);
     metricas << tv.tv_sec - segundoInicial << "." << tv.tv_usec << ";"; //timestamp
     metricas << acked_packet_number << ";";
     metricas << acked_bytes << ";"; // packet size in bytes
+    metricas << (rtt_stats_->latest_rtt()).ToMicroseconds() << ";"; // latest RTT
+    metricas << (rtt_stats_->smoothed_rtt()).ToMicroseconds() << ";"; // latest RTT
+    metricas << (rtt_stats_->mean_deviation()).ToMicroseconds() << ";"; // RTT mean deviation
     metricas << bytes_in_flight << ";";
     metricas << BandwidthEstimate().ToKBitsPerSecond() << ";";
     metricas.close();

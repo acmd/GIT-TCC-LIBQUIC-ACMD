@@ -55,7 +55,7 @@ bool FLAGS_shift_quic_cubic_epoch_when_app_limited = false;
 bool FLAGS_quic_measure_headers_hol_blocking_time = true;
 
 // If true, disable pacing in QUIC.
-bool FLAGS_quic_disable_pacing_for_perf_tests = true;
+bool FLAGS_quic_disable_pacing_for_perf_tests = false;
 
 // If true, Close the connection instead of writing unencrypted stream data.
 bool FLAGS_quic_never_write_unencrypted_data = true;
